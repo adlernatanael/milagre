@@ -7,9 +7,9 @@ import { ProjectIcon } from "./project-icon";
 import { lineHeight, radius, type } from "./design-tokens";
 import { Field, InlineError, PillButton, RowCheckbox, pressStyle, useStyles } from "./ui";
 import { createStylesHook, useTheme, type Palette } from "./theme";
-import { subprojectsLayout } from "@milagre/shared/chat-display";
+import { treeLayout } from "@milagre/shared/chat-display";
 import { useChatList } from "./chat-display-setting";
-import type { SubprojectScan } from "@milagre/shared/project-list";
+import type { FolderScan } from "@milagre/shared/project-list";
 
 type Found = { path: string; name: string };
 
@@ -29,15 +29,15 @@ export function ProjectSearch({ onOpen }: { onOpen: (path: string) => void }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Results | null>(null);
   const [cloning, setCloning] = useState(false);
-  // A typed folder with repositories inside: the Sub-projects step takes the search's place.
-  const [scan, setScan] = useState<SubprojectScan | null>(null);
+  // A typed folder with repositories inside: the step that adds them takes the search's place.
+  const [scan, setScan] = useState<FolderScan | null>(null);
   const [checking, setChecking] = useState(false);
-  // A typed path is checked for repositories inside it first (the Mac's Settings › Worktrees › Detect Sub-projects can
-  // turn that off); a computer whose Milagre can't check opens it as one Project, as before.
+  // A typed path is checked for repositories inside it first (the Mac's Settings › Worktrees › Detect repositories in a
+  // folder can turn that off); a computer whose Milagre can't check opens it as one Project, as before.
   async function openTyped(folder: string) {
     if (!client || checking) return;
     setChecking(true);
-    const found = await client.call<SubprojectScan>("project:scan-children", [folder]).catch(() => null);
+    const found = await client.call<FolderScan>("project:scan-children", [folder]).catch(() => null);
     setChecking(false);
     // A repository with repositories inside (submodules, a monorepo) opens as one Project.
     if (found?.detect && !found.git && found.children.some((child) => child.git)) setScan(found);
@@ -73,7 +73,7 @@ export function ProjectSearch({ onOpen }: { onOpen: (path: string) => void }) {
     };
   }, [client, query, cloning]);
   if (cloning) return <CloneForm onBack={() => setCloning(false)} onOpen={onOpen} />;
-  if (scan) return <SubprojectsForm scan={scan} onBack={() => setScan(null)} onOpen={onOpen} />;
+  if (scan) return <ImportFolderForm scan={scan} onBack={() => setScan(null)} onOpen={onOpen} />;
   const typed = query.trim();
   const path = typed.startsWith("/") ? typed : "";
   const recent = new Set(session.recent.map((item) => item.path));
@@ -211,10 +211,11 @@ function CloneForm({ onBack, onOpen }: { onBack: () => void; onOpen: (path: stri
 }
 
 /**
- * Adds a folder with repositories inside as a Parent Project: each repository starts checked, other folders unchecked,
- * as desktop's Add Project does. "Open as one Project" skips the grouping.
+ * Adds a folder that holds repositories, as desktop's Add Project does: repositories start checked, other folders
+ * unchecked. The checked ones open as Projects and, two or more, get a Named Link named after the folder; the Tree
+ * layout comes on to draw it. "Open as one Project" opens the folder itself.
  */
-function SubprojectsForm({ scan, onBack, onOpen }: { scan: SubprojectScan; onBack: () => void; onOpen: (path: string) => void }) {
+function ImportFolderForm({ scan, onBack, onOpen }: { scan: FolderScan; onBack: () => void; onOpen: (path: string) => void }) {
   const client = useSession().client;
   const styles = useStyles();
   const { colors } = useTheme();
@@ -234,12 +235,16 @@ function SubprojectsForm({ scan, onBack, onOpen }: { scan: SubprojectScan; onBac
         onOpen(scan.folder);
         return;
       }
-      const opened = await client.call<{ path: string }>("project:open", [scan.folder]);
-      await client.call("project:set-subprojects", [opened.path, chosen]);
-      // The Sub-projects layout is what draws a Parent Project: it comes on with the first one.
-      const layout = subprojectsLayout(chatList);
-      if (layout && chosen.length) setChatList(layout);
-      onOpen(opened.path);
+      const opened: string[] = [];
+      for (const folder of chosen) opened.push((await client.call<{ path: string }>("project:open", [folder])).path);
+      if (opened.length > 1) {
+        const registered = await client.call<{ id: string; path: string }[]>("project:registry", []);
+        const projectIds = opened.map((path) => registered.find((entry) => entry.path === path)?.id).filter((id): id is string => !!id);
+        if (projectIds.length > 1) await client.call("link:create", [{ name, projectIds }]);
+        const layout = treeLayout(chatList);
+        if (layout) setChatList(layout);
+      }
+      onOpen(opened[0]!);
     } catch (e) {
       setError((e as Error).message);
       setBusy(false);
@@ -248,7 +253,7 @@ function SubprojectsForm({ scan, onBack, onOpen }: { scan: SubprojectScan; onBac
   return (
     <View style={{ flex: 1 }}>
       <Text style={[styles.muted, { paddingHorizontal: 16, paddingBottom: 12 }]}>
-        {`${name} holds ${scan.children.filter((child) => child.git).length} repositories. Add it as a Parent Project with the ones you check as its Sub-projects, each with its own Worktrees and Chats.`}
+        {`${name} holds ${scan.children.filter((child) => child.git).length} repositories. Add the ones you check as Projects, grouped by a Link named ${name}.`}
       </Text>
       <FlatList
         data={scan.children}
@@ -271,7 +276,7 @@ function SubprojectsForm({ scan, onBack, onOpen }: { scan: SubprojectScan; onBac
           <PillButton title="Back" variant="plain" muted disabled={busy} onPress={onBack} />
           <PillButton title="Open as one Project" variant="plain" disabled={busy} onPress={() => void add(false)} />
           <PillButton
-            title={`Add with ${chosen.length} Sub-project${chosen.length === 1 ? "" : "s"}`}
+            title={`Add ${chosen.length} Project${chosen.length === 1 ? "" : "s"}`}
             loading={busy}
             disabled={!chosen.length}
             onPress={() => void add(true)}

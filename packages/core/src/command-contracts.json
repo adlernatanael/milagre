@@ -2205,27 +2205,6 @@
         }
       ]
     },
-    "project:set-subprojects": {
-      "parameters": [
-        {
-          "name": "parentPath",
-          "optional": false,
-          "schema": {
-            "type": "string"
-          }
-        },
-        {
-          "name": "paths",
-          "optional": false,
-          "schema": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      ]
-    },
     "project:known": {
       "parameters": []
     },
@@ -4069,10 +4048,10 @@
         }
       ]
     },
-    "subprojects:detect:read": {
+    "folder-repos:detect:read": {
       "parameters": []
     },
-    "subprojects:detect:save": {
+    "folder-repos:detect:save": {
       "parameters": [
         {
           "name": "value",

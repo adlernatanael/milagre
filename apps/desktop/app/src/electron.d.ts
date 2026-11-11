@@ -59,7 +59,8 @@ import type { AgentRuns } from "./lib/agent-runs";
 import type { SessionPatch, WorktreeRename } from "@milagre/shared/project-edits";
 import type { GitChanges, GitChatContext, GitCommitResult, GitPrResult, GitPushResult, GitTextResult } from "./lib/git-dialog";
 import type { ModelProvider } from "./model";
-import type { RecentProject, SubprojectScan } from "./lib/project-list";
+import type { RecentProject } from "./lib/project-list";
+import type { FolderScan } from "@milagre/shared/project-list";
 import type {
   AgentCliStatus,
   AgentModels,
@@ -375,8 +376,6 @@ export type MilagreBridge = {
   readMainSync: (projectPath: string) => Promise<MainSyncSettings>;
   /** null brings the global default back. */
   saveMainSync: (projectPath: string, override: boolean | null) => Promise<MainSyncSettings>;
-  readDetectSubprojects: () => Promise<{ detectSubprojects: boolean }>;
-  saveDetectSubprojects: (value: boolean) => Promise<{ detectSubprojects: boolean }>;
   readMainSyncDefault: () => Promise<{ syncMain: boolean }>;
   saveMainSyncDefault: (value: boolean) => Promise<{ syncMain: boolean }>;
   /** A main branch sync finished, before a new Worktree. */
@@ -606,8 +605,9 @@ export type MilagreBridge = {
   readMedia: (request: { scope: string; path: string }) => Promise<MediaBytes>;
   /** Projects opened lately, most recent first; folders that are gone are left out. */
   listRecentProjects: () => Promise<RecentProject[]>;
-  scanSubprojects: (folder: string) => Promise<SubprojectScan>;
-  setSubprojects: (parentPath: string, paths: string[]) => Promise<RecentProject[]>;
+  scanFolder: (folder: string) => Promise<FolderScan>;
+  readDetectRepositories: () => Promise<{ detectRepositories: boolean }>;
+  saveDetectRepositories: (value: boolean) => Promise<{ detectRepositories: boolean }>;
   /** Every Project the computer knows, newest opened first, for the new-chat picker. Rejects on a computer that predates it. */
   listKnownProjects: () => Promise<RecentProject[]>;
   /** Onboarding: folders Claude Code and Codex sessions on this Mac worked in, newest first. */

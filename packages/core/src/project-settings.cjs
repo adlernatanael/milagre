@@ -122,35 +122,17 @@ function createProjectSettings(file) {
       });
       return { hidden: hidden === true };
     },
-    // Each Parent Project's Sub-projects, in their order (see subprojects.cjs).
-    async subprojects() {
-      const { projects } = await read({ strict: false });
-      const map = new Map();
-      for (const [key, entry] of Object.entries(projects)) {
-        const list = Array.isArray(entry?.subprojects) ? entry.subprojects.filter((value) => typeof value === "string" && path.isAbsolute(value)) : [];
-        if (list.length) map.set(key, list);
-      }
-      return map;
-    },
-    // An empty list removes the setting: the folder is an ordinary Project again.
-    async setSubprojects(projectPath, paths) {
-      await update(projectPath, (entry) => {
-        if (paths.length) entry.subprojects = paths;
-        else delete entry.subprojects;
-      });
-      return { subprojects: paths };
-    },
-    // Whether adding a folder with repositories inside offers them as Sub-projects (on unless turned off).
-    async getDetectSubprojects() {
+    // Whether adding a folder with repositories inside offers them as Projects with a Named Link (on unless turned off).
+    async getDetectRepositories() {
       const data = await read({ strict: false });
-      return { detectSubprojects: data.defaults?.detectSubprojects !== false };
+      return { detectRepositories: data.defaults?.detectRepositories !== false };
     },
-    async setDetectSubprojects(value) {
+    async setDetectRepositories(value) {
       await save((data) => {
         const defaults = data.defaults && typeof data.defaults === "object" ? data.defaults : {};
-        data.defaults = { ...defaults, detectSubprojects: value !== false };
+        data.defaults = { ...defaults, detectRepositories: value !== false };
       });
-      return { detectSubprojects: value !== false };
+      return { detectRepositories: value !== false };
     },
     // An empty list removes the setting, which brings the default back.
     async setFilesToCopy(projectPath, filesToCopy) {

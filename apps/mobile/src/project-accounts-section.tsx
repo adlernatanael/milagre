@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { accountFallbackLabel } from "@milagre/shared/project-list";
 import { StyleSheet, Text, View } from "react-native";
 import { router } from "expo-router";
 import { ArrowDown01Icon, Briefcase01Icon, UserIcon, UserMultipleIcon } from "@hugeicons/core-free-icons";
@@ -179,7 +178,7 @@ function ProjectAccountRows({ scopeKey }: { scopeKey: string }) {
               items: [
                 {
                   id: "__default__",
-                  title: `${accountFallbackLabel(group.inheritedFrom)}${fallback?.email ? ` · ${fallback.email}` : ""}`,
+                  title: `Use computer default${fallback?.email ? ` · ${fallback.email}` : ""}`,
                   systemImage: "desktopcomputer",
                   checked: group.accountId === null,
                   disabled: busy,

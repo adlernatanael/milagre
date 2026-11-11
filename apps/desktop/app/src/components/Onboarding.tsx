@@ -27,7 +27,7 @@ import { FIELD_INNER } from "./primitives/Field";
 import { InlineError } from "./primitives/InlineError";
 import { SectionLabel } from "./primitives/SectionLabel";
 import { Skeleton } from "./primitives/Skeleton";
-import { useOpenFolder } from "./SubprojectsDialog";
+import { useOpenFolder } from "./ImportFolderDialog";
 import { bridgeFor } from "../lib/computer-bridge";
 
 const PROVIDERS: ModelProvider[] = ["claude", "codex", "antigravity", "kiro"];
@@ -314,7 +314,7 @@ function ProjectStep({ onBack, onOpened, onSkip }: { onBack: () => void; onOpene
   const [form, setForm] = useState<Form>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  // A folder with repositories inside asks which become its Sub-projects first, as Add Project does.
+  // A folder with repositories inside asks which to add first, as Add Project does.
   const openFolder = useOpenFolder(onOpened);
   useEffect(() => {
     let live = true;

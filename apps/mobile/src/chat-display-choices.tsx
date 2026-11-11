@@ -208,8 +208,8 @@ export function ByProjectPreview() {
   );
 }
 
-/** Sub-projects: a Parent Project, its Sub-projects under it, each with a Worktree and its Chats. */
-export function SubprojectsPreview() {
+/** Tree: a Link with its Projects under it, each with a Worktree and its Chats. */
+export function TreePreview() {
   const { colors } = useTheme();
   const sub = (width: DimensionValue) => (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 4, paddingLeft: 10 }}>

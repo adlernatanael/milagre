@@ -11,7 +11,7 @@ import { FIELD_LABEL, Input } from "./primitives/Field";
 import { Icon } from "./primitives/Icon";
 import { InlineError } from "./primitives/InlineError";
 import { ScrollArea } from "./primitives/ScrollArea";
-import { useOpenFolder } from "./SubprojectsDialog";
+import { useOpenFolder } from "./ImportFolderDialog";
 import { ThisComputer, isWindows, thisComputer } from "../lib/shortcut-hints";
 
 const THIS_MAC = "this-mac";
@@ -39,7 +39,7 @@ export function AddProjectDialog({ onClose, onOpened }: { onClose: () => void; o
   const [url, setUrl] = useState("");
   // This Mac's clone folder, from its own dialog; null is ~/Code. Another computer's is the folder on screen.
   const [parent, setParent] = useState<string | null>(null);
-  // A folder chosen on This Mac with repositories inside: the Sub-projects step takes the dialog's place.
+  // A folder chosen on This Mac with repositories inside: the step that adds them takes the dialog's place.
   const folder = useOpenFolder(onOpened, onClose);
   const reads = useRef(0);
   const computer = computers.find((item) => item.id === on);

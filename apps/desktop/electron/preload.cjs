@@ -194,8 +194,6 @@ function makeBridge(invoke, listen, send) {
     saveProjectGit: (projectPath, value) => invoke("project-git:save", projectPath, value),
     readMainSync: (projectPath) => invoke("main-sync:read", projectPath),
     saveMainSync: (projectPath, override) => invoke("main-sync:save", projectPath, override),
-    readDetectSubprojects: () => invoke("subprojects:detect:read"),
-    saveDetectSubprojects: (value) => invoke("subprojects:detect:save", value),
     readMainSyncDefault: () => invoke("main-sync:default:read"),
     saveMainSyncDefault: (value) => invoke("main-sync:default:save", value),
     onMainSyncStatus: (callback) => listen("main-sync:status", callback),
@@ -321,10 +319,10 @@ function makeBridge(invoke, listen, send) {
     listDirs: (request) => invoke("fs:list-dirs", request),
     readMedia: (request) => invoke("media:read", request),
     listRecentProjects: () => invoke("project:recent"),
-    /** The repositories and folders inside a folder, offered as Sub-projects when it is added. */
-    scanSubprojects: (folder) => invoke("project:scan-children", folder),
-    /** Makes a recent Project the Parent Project of the folders chosen inside it; an empty list makes it ordinary again. */
-    setSubprojects: (parentPath, paths) => invoke("project:set-subprojects", parentPath, paths),
+    /** The repositories in a folder being added, offered as Projects with a Named Link that groups them. */
+    scanFolder: (folder) => invoke("project:scan-children", folder),
+    readDetectRepositories: () => invoke("folder-repos:detect:read"),
+    saveDetectRepositories: (value) => invoke("folder-repos:detect:save", value),
     /** Every Project the computer knows, for the new-chat picker; the sidebar keeps to the recent ones. */
     listKnownProjects: () => invoke("project:known"),
     listAgentFolders: () => invoke("onboarding:agent-folders"),

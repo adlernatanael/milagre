@@ -5,10 +5,7 @@ import { projectInitial } from "@milagre/shared/project-list";
 /** A project in the recent list, as the main process keeps it (most recent first). */
 /** `hidden`: kept out of the all-Projects sidebar and the phone's Projects list. */
 /** `origin`: the Git remote as "host/owner/repo", which ties the copies of one repository on several computers together. */
-/** `parent`: the Parent Project this Sub-project is listed under; it follows its parent on the list. */
-export type RecentProject = { path: string; name: string; openedAt: string; hidden?: boolean; origin?: string; parent?: string };
-
-export type { SubprojectScan } from "@milagre/shared/project-list";
+export type RecentProject = { path: string; name: string; openedAt: string; hidden?: boolean; origin?: string };
 
 /** One project row in the project menu. */
 export type ProjectRow = { path: string; name: string; initial: string; current: boolean };

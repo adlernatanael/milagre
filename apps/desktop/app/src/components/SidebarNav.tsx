@@ -2,7 +2,6 @@ import { preferenceStorage as localStorage } from "../lib/preference-storage.ts"
 import { shortcutCommand, shortcutLabel, useKeybindings, chatJumpCommand } from "../lib/keybindings";
 import type { NamedProjectLink } from "@milagre/shared/model";
 import { RemoveProjectDialog } from "./RemoveProjectDialog";
-import { SubprojectsDialog } from "./SubprojectsDialog";
 import { ProjectAvatarStack } from "./ProjectAvatarStack";
 import { setBarControlsWidth, useWindowChrome } from "../lib/window-chrome";
 import { ResizeHandle } from "./primitives/ResizeHandle";
@@ -34,7 +33,6 @@ import {
   Delete02Icon,
   FolderAddIcon,
   FolderOpenIcon,
-  FolderTreeIcon,
   FlowConnectionIcon,
   LaptopIcon,
   Link04Icon,
@@ -59,9 +57,8 @@ import { thisComputer, useShortcutHints } from "../lib/shortcut-hints";
 import { useEvent } from "../lib/stable";
 import { ScrollArea } from "./primitives/ScrollArea";
 import { projectMenuActions, type ProjectMenuKey } from "@/lib/reveal";
-import { projectRows, stableOrder, type RecentProject, type SubprojectScan } from "@/lib/project-list";
-import { subprojectsLayout } from "@milagre/shared/chat-display";
-import { projectTree, worktreeGroups } from "@milagre/shared/project-list";
+import { projectRows, stableOrder, type RecentProject } from "@/lib/project-list";
+import { linkOwners, nestUnder, worktreeGroups, worktreeHeading } from "@milagre/shared/project-list";
 import { WorktreeHeading } from "./sidebar/WorktreeHeading";
 import { ChatRow, type ChatRowActions, type RowComputer, type SidebarRecent } from "./sidebar/ChatRow";
 import { useComputers, useHiddenComputers, isDimmed } from "../lib/computers";
@@ -296,7 +293,6 @@ function ScopeHeader({
   plusIsCurrent = current,
   attention,
   computer,
-  subprojects,
   onToggle,
   onNewChat,
   onDragStart,
@@ -313,8 +309,6 @@ function ScopeHeader({
   /** The computer the Project or Link lives on, once there are two or more: a chip with its short name, the full one in
    * a tooltip. Its rows then leave it out. */
   computer?: RowComputer;
-  /** A Parent Project's Sub-project count: its name stays strong and a chip says how many it holds, folded too. */
-  subprojects?: number;
   onToggle: () => void;
   /** None hides the +. */
   onNewChat?: () => void;
@@ -363,21 +357,10 @@ function ScopeHeader({
         </span>
         <span
           data-scope-name
-          className={`min-w-0 flex-1 truncate text-[length:calc(13px+var(--sidebar-delta))] ${current || subprojects ? "font-medium text-ink" : "text-ink-2"}`}
+          className={`min-w-0 flex-1 truncate text-[length:calc(13px+var(--sidebar-delta))] ${current ? "font-medium text-ink" : "text-ink-2"}`}
         >
           {name}
         </span>
-        {subprojects ? (
-          <Tooltip label={`${subprojects} Sub-project${subprojects === 1 ? "" : "s"}`} align="end" className="shrink-0">
-            <span
-              data-scope-subprojects
-              className="flex h-[18px] items-center gap-1 rounded-chip bg-field px-1.5 text-[length:calc(11px+var(--sidebar-delta))] font-medium text-ink-2"
-            >
-              <Icon icon={FolderTreeIcon} size={12} />
-              {subprojects}
-            </span>
-          </Tooltip>
-        ) : null}
         {/* Never shrinks: a long Project name gives way first. */}
         {computer && (
           <Tooltip
@@ -765,40 +748,24 @@ export default memo(function SidebarNav({
     return () => window.removeEventListener("storage", follow);
   }, []);
 
-  // Every recent Project the user didn't hide, then every Link, like the phone's list. The open one is always there. A
-  // Sub-project is hidden with its Parent Project, and drawn under it (projectTree).
-  const recentOf = (path: string) => recentProjects.find((project) => project.path === path);
+  // Every recent Project the user didn't hide, then every Link, like the phone's list. The open one is always there.
   const projectScopes = projects
     .filter((row) => !isHome(row.path))
-    .filter((row) => {
-      const parent = recentOf(row.path)?.parent;
-      return row.current || (!recentOf(row.path)?.hidden && !(parent && recentOf(parent)?.hidden) && !hiddenComputers.has(computerOfKey(row.path)));
-    })
-    .map((row) => {
-      const recent = recentOf(row.path);
-      return {
-        key: row.path,
-        name: row.name,
-        initial: row.initial,
-        link: null as NamedProjectLink | null,
-        computerId: computerOfKey(row.path),
-        origin: recent?.origin,
-        parent: recent?.parent,
-      };
-    });
-  // Only top-level Projects take part in the saved order; their Sub-projects follow them.
-  const topScopes = projectScopes.filter((scope) => !scope.parent || !projectScopes.some((other) => other.key === scope.parent));
+    .filter((row) => row.current || (!recentProjects.find((project) => project.path === row.path)?.hidden && !hiddenComputers.has(computerOfKey(row.path))))
+    .map((row) => ({
+      key: row.path,
+      name: row.name,
+      initial: row.initial,
+      link: null as NamedProjectLink | null,
+      computerId: computerOfKey(row.path),
+      origin: recentProjects.find((project) => project.path === row.path)?.origin,
+    }));
   if (recentLoaded)
     scopeOrder.current = stableOrder(
       scopeOrder.current,
-      topScopes.map((scope) => scope.key),
+      projectScopes.map((scope) => scope.key),
     );
-  const orderedProjects = recentLoaded
-    ? [
-        ...scopeOrder.current.map((key) => topScopes.find((scope) => scope.key === key)!).filter(Boolean),
-        ...projectScopes.filter((scope) => !topScopes.includes(scope)),
-      ]
-    : projectScopes;
+  const orderedProjects = recentLoaded ? scopeOrder.current.map((key) => projectScopes.find((scope) => scope.key === key)!).filter(Boolean) : projectScopes;
   // The next sidebar to mount (a Link's, or the Project one again) starts from what this one has.
   useEffect(() => {
     Object.assign(lastLists, { links: namedLinks, registered: registeredProjects, recent: recentProjects, recentLoaded, order: scopeOrder.current });
@@ -809,15 +776,7 @@ export default memo(function SidebarNav({
     ...orderedProjects,
     ...namedLinks
       .filter((link) => link.id === selectedLink?.id || (!link.hidden && !hiddenComputers.has(LOCAL_COMPUTER)))
-      .map((link) => ({
-        key: `milagre-link:${link.id}`,
-        name: link.name,
-        initial: "",
-        link,
-        computerId: LOCAL_COMPUTER,
-        origin: undefined,
-        parent: undefined,
-      })),
+      .map((link) => ({ key: `milagre-link:${link.id}`, name: link.name, initial: "", link, computerId: LOCAL_COMPUTER, origin: undefined })),
   ];
   // With other computers, one list by name (their order can't follow this Mac's open history); with this Mac alone, as before.
   const scopes = multi
@@ -1047,26 +1006,31 @@ export default memo(function SidebarNav({
   // Grouped by Project: one repository's copies on several computers (one Git origin) share a heading, in its first
   // copy's place, and their chats merge under it, each naming its computer.
   const sections =
-    showAll && !oneList
-      ? groupByOrigin(
-          // A Sub-project stays under its Parent Project: never merged with another computer's copy of its repository.
-          groups.map((group) => ({
-            ...group,
-            origin: group.scope.parent && chatList === "tree" ? undefined : group.scope.origin,
-            computerId: group.scope.computerId,
+    showAll && !oneList ? groupByOrigin(groups.map((group) => ({ ...group, origin: group.scope.origin, computerId: group.scope.computerId }))) : [];
+  // The Tree layout draws each Named Link with its member Projects under it (the first Link that has a Project wins);
+  // the other layouts list every scope on its own.
+  const tree = chatList === "tree";
+  const memberPaths = (link: NamedProjectLink) => link.projectIds.map((id) => registeredProjects.find((project) => project.id === id)?.path ?? "");
+  const linkOwnerOf = tree
+    ? linkOwners(
+        sections
+          .filter((section) => section.scope.link)
+          .map((section) => ({
+            key: section.scope.key,
+            memberPaths: memberPaths(section.scope.link!),
           })),
-        )
-      : [];
-  // The sections as drawn: in the Sub-projects layout each Sub-project goes inside its Parent Project's section; By
-  // Project lists every Project on its own.
-  const nested = chatList === "tree";
-  const sectionTree = nested
-    ? projectTree(
-        sections,
-        (section) => section.scope.key,
-        (section) => section.scope.parent,
       )
-    : sections.map((item) => ({ item, children: [] }));
+    : new Map<string, string>();
+  // A Link's member Projects in the Link's own order, whatever order the recent list put them in.
+  const sectionTree = nestUnder(
+    sections,
+    (section) => section.scope.key,
+    (section) => (section.copies.length > 1 ? undefined : linkOwnerOf.get(section.scope.key)),
+  ).map((node) => {
+    if (!node.item.scope.link || node.children.length < 2) return node;
+    const order = memberPaths(node.item.scope.link);
+    return { ...node, children: node.children.toSorted((a, b) => order.indexOf(a.scope.key) - order.indexOf(b.scope.key)) };
+  });
   // A Link's icon is its first Project's.
   const linkFirstProject = (scope: (typeof scopes)[number], link: NamedProjectLink, current: boolean) => {
     const firstId = link.projectIds[0];
@@ -1196,49 +1160,8 @@ export default memo(function SidebarNav({
     if (pressed.closest("a, input, [aria-haspopup], [data-scope-action], [data-scope-menu]")) return;
     dragScopeHeader(event, key, canDragScope, setDraggingScope, reorderScope);
   };
-  // A Sub-project moves among its siblings only; the new order is its Parent Project's, saved on this Mac's host.
-  const reorderSubproject = (parent: string, siblings: string[], key: string, beforeKey: string | null) => {
-    const without = siblings.filter((item) => item !== key);
-    const at = beforeKey === null ? without.length : without.indexOf(beforeKey);
-    if (at === -1) return;
-    const next = [...without.slice(0, at), key, ...without.slice(at)];
-    if (next.every((item, index) => item === siblings[index])) return;
-    // Shown at once in the new order; the host's answer replaces it.
-    setRecentProjects((list) => [
-      ...list.filter((project) => project.parent !== parent),
-      ...next.flatMap((child) => list.filter((project) => project.path === child)),
-    ]);
-    void bridgeForKey(parent)
-      .setSubprojects(parent, next)
-      .then(
-        (list) => {
-          if (Array.isArray(list)) setRecentProjects(list);
-          window.dispatchEvent(new Event(RECENT_PROJECTS_CHANGED));
-        },
-        () => setListsChanged((count) => count + 1),
-      );
-  };
-  const startSubprojectDrag = (event: ReactPointerEvent<HTMLElement>, parent: string, siblings: string[], key: string) => {
-    if (event.button !== 0) return;
-    const pressed = event.target as HTMLElement;
-    if (pressed.closest("a, input, [aria-haspopup], [data-scope-action], [data-scope-menu]")) return;
-    dragScopeHeader(
-      event,
-      key,
-      (other) => siblings.includes(other),
-      setDraggingScope,
-      (moved, beforeKey) => reorderSubproject(parent, siblings, moved, beforeKey),
-    );
-  };
 
   const [removingProject, setRemovingProject] = useState<{ path: string; name: string } | null>(null);
-  // A Parent Project's Sub-projects being chosen again (or a Project's first ones), from its ⋯ menu.
-  const [editingSubprojects, setEditingSubprojects] = useState<SubprojectScan | null>(null);
-  const editSubprojects = (path: string) =>
-    void bridgeForKey(path)
-      .scanSubprojects(path)
-      .then(setEditingSubprojects)
-      .catch(() => {});
 
   // Checked in the project chooser; the choice belongs to this Mac alone.
   const showProject = (path: string, show: boolean) => {
@@ -1315,13 +1238,10 @@ export default memo(function SidebarNav({
       "copy-name": { run: () => copy(scope.name) },
       settings: { run: () => onOpenProjectSettings?.(scope.key), disabled: !onOpenProjectSettings },
     };
-    // This Mac's top-level Projects can hold Sub-projects; a Sub-project can't.
-    const nests = !isRemoteKey(scope.key) && !recentOf(scope.key)?.parent;
     return [
       ...projectMenuActions(IS_MAC)
         .filter((item) => item.key !== "reveal" || !isRemoteKey(scope.key))
         .map((item) => ({ key: item.key, label: item.label, icon: PROJECT_MENU_ICONS[item.key], ...actions[item.key] })),
-      ...(nests ? [{ key: "subprojects", label: "Sub-projects…", icon: FolderTreeIcon, run: () => editSubprojects(scope.key) }] : []),
       {
         key: "remove",
         label: "Remove Project",
@@ -1580,57 +1500,100 @@ export default memo(function SidebarNav({
             />
           ) : null,
         )}
-        <ScopeBody open={open}>
-          <FlatChatList chats={chats} scopes={lists} inbox={false} />
-          {failed.map((part) => (
-            <p key={part.scope.key} className="mx-2 flex h-8 items-center gap-1 pl-9 text-[length:calc(13px+var(--sidebar-delta))] text-ink-3">
-              <span className="truncate">Couldn't load Chats{part.list.computer ? ` on ${part.list.computer.name}` : ""}.</span>
-              <button type="button" onClick={() => retryScope(part.scope.key)} className={`shrink-0 ${RETRY}`}>
-                Retry
-              </button>
-            </p>
-          ))}
-          {chats.length === 0 && failed.length === 0 && !copies.some((part) => part.pinned.length > 0) && (
-            <p className="mx-2 h-8 pl-9 text-[length:calc(13px+var(--sidebar-delta))] leading-8 text-ink-3">{loading ? "Loading Chats…" : "No Chats yet"}</p>
-          )}
-        </ScopeBody>
+        <div
+          inert={!open}
+          data-scope-body
+          className="grid transition-[grid-template-rows,opacity] duration-base ease-enter motion-reduce:transition-none"
+          style={{ gridTemplateRows: open ? "1fr" : "0fr", opacity: open ? 1 : 0 }}
+        >
+          <div className="min-w-0 overflow-hidden">
+            <FlatChatList chats={chats} scopes={lists} inbox={false} />
+            {failed.map((part) => (
+              <p key={part.scope.key} className="mx-2 flex h-8 items-center gap-1 pl-9 text-[length:calc(13px+var(--sidebar-delta))] text-ink-3">
+                <span className="truncate">Couldn't load Chats{part.list.computer ? ` on ${part.list.computer.name}` : ""}.</span>
+                <button type="button" onClick={() => retryScope(part.scope.key)} className={`shrink-0 ${RETRY}`}>
+                  Retry
+                </button>
+              </p>
+            ))}
+            {chats.length === 0 && failed.length === 0 && !copies.some((part) => part.pinned.length > 0) && (
+              <p className="mx-2 h-8 pl-9 text-[length:calc(13px+var(--sidebar-delta))] leading-8 text-ink-3">{loading ? "Loading Chats…" : "No Chats yet"}</p>
+            )}
+          </div>
+        </div>
       </section>
     );
   };
 
-  // A scope's + : the open one starts its new Chat as ⌘N does, another switches to it first.
-  const newChatFor = (key: string, current: boolean) =>
-    current
-      ? () => {
-          if (activeTitle === undefined) setDemoActiveTitle(null);
-          (onNewCurrentScopeChat ?? onNewChat)?.();
-        }
-      : () => onNewChatInScope?.(key);
+  // A scope's Chats in its section: in the Tree layout a Project's go by Worktree (worktreeGroups), the main checkout's
+  // and each Worktree's only Chat right under it, a Worktree shared by several Chats under its heading; otherwise one
+  // list. With none, what keeps them away (`quiet`: nothing, for a Link whose member Projects follow).
+  const scopeChatsBody = (section: (typeof sections)[number], quiet = false) => {
+    const { scope, current, state, rest, pinned, list } = section;
+    const chatList = (recents: SidebarRecent[], pinTo = false, key?: string) => (
+      <ChatList
+        key={key}
+        {...scopeBadge(scope, current)}
+        recents={recents}
+        scopeKey={scope.key}
+        {...list}
+        header={null}
+        {...(pinTo ? { pinnedTarget: pinSlots[scope.key] ?? null, anyPinned } : {})}
+      />
+    );
+    if (rest.length > 0 || pinned.length > 0) {
+      if (!tree || scope.link) return chatList(pinned.length ? [...pinned, ...rest] : rest, true);
+      const worktrees =
+        state && "worktrees" in state
+          ? Object.values(state.worktrees).map((worktree) => ({ path: worktree.path, name: worktree.name }))
+          : rest.flatMap((row) => (row.details?.path && row.details.branch ? [{ path: row.details.path, name: row.details.branch }] : []));
+      const groups = worktreeGroups({
+        projectPath: unqualifyKey(scope.key),
+        worktrees,
+        rows: rest,
+        pathOf: (row) => row.details?.path,
+        branchOf: (row) => row.details?.branch,
+      });
+      return (
+        <>
+          {pinned.length > 0 && chatList(pinned, true)}
+          {groups.map((group) =>
+            worktreeHeading(group) ? (
+              <div key={group.path} data-sidebar-worktree={group.path}>
+                <WorktreeHeading name={group.name} running={group.rows.some((row) => row.mark === "running" || row.mark === "background")} />
+                <div className="ml-3">{chatList(group.rows)}</div>
+              </div>
+            ) : group.rows.length ? (
+              chatList(group.rows, false, group.path)
+            ) : null,
+          )}
+        </>
+      );
+    }
+    if (!state && !current && failedScopes.has(scope.key))
+      return (
+        <p className="mx-2 flex h-8 items-center gap-1 pl-9 text-[length:calc(13px+var(--sidebar-delta))] text-ink-3">
+          Couldn't load Chats.
+          <button type="button" onClick={() => retryScope(scope.key)} className={RETRY}>
+            Retry
+          </button>
+        </p>
+      );
+    if (quiet) return null;
+    return (
+      <p className="mx-2 h-8 pl-9 text-[length:calc(13px+var(--sidebar-delta))] leading-8 text-ink-3">{state || current ? "No Chats yet" : "Loading Chats…"}</p>
+    );
+  };
 
-  // A Parent Project's Sub-project: its heading, then its Chats by Worktree (worktreeGroups): the main checkout's right
-  // under it, every other Worktree under a heading of its own that folds. Its pinned Chats go to Pinned like any Project's.
-  const subprojectSection = (section: (typeof sections)[number], siblings: string[]) => {
-    const { scope, current, state, rest, pinned, list, dimmed } = section;
+  // A Named Link's member Project in the Tree layout: its own heading, folding, under the Link's shared Chats.
+  const linkMember = (section: (typeof sections)[number]) => {
+    const { scope, current, list, dimmed } = section;
     const open = !closedScopes.includes(scope.key);
-    const projectPath = unqualifyKey(scope.key);
-    const parentScope = scopes.find((item) => item.key === scope.parent);
-    const worktrees =
-      state && "worktrees" in state
-        ? Object.values(state.worktrees).map((worktree) => ({ path: worktree.path, name: worktree.name }))
-        : rest.flatMap((row) => (row.details?.path && row.details.branch ? [{ path: row.details.path, name: row.details.branch }] : []));
-    const groups = worktreeGroups({
-      projectPath,
-      worktrees,
-      rows: rest,
-      pathOf: (row) => row.details?.path,
-      branchOf: (row) => row.details?.branch,
-    });
-    const newChat = newChatFor(scope.key, current);
     return (
       <section
         key={scope.key}
         data-sidebar-scope={scope.key}
-        data-sidebar-subproject={scope.parent}
+        data-sidebar-link-member
         data-current={current || undefined}
         aria-label={scope.name}
         data-offline={dimmed || undefined}
@@ -1638,63 +1601,24 @@ export default memo(function SidebarNav({
       >
         <ScopeHeader
           name={scope.name}
-          icon={
-            // A Sub-project wears its Parent Project's icon, so a family reads as one.
-            <ProjectAvatar
-              name={parentScope?.name ?? scope.name}
-              src={scope.parent ? scopeImage(scope.parent) : undefined}
-              initial={parentScope?.initial ?? scope.initial}
-            />
-          }
+          icon={<ProjectAvatar name={scope.name} src={current && !selectedLink ? workspace.image : scopeImage(scope.key)} initial={scope.initial} />}
           open={open}
           current={current}
           attention={!current && attentionPaths.includes(scope.key)}
           computer={list.show.computer ? list.computer : undefined}
           onToggle={() => toggleScope(scope.key)}
-          onDragStart={scope.parent && !isRemoteKey(scope.key) ? (event) => startSubprojectDrag(event, scope.parent!, siblings, scope.key) : undefined}
-          dragging={draggingScope === scope.key}
-          onNewChat={newChat}
+          onNewChat={
+            current
+              ? () => {
+                  if (activeTitle === undefined) setDemoActiveTitle(null);
+                  (onNewCurrentScopeChat ?? onNewChat)?.();
+                }
+              : () => onNewChatInScope?.(scope.key)
+          }
           menu={scopeMenu(scope)}
         />
-        {pinned.length > 0 && (
-          <ChatList
-            {...scopeBadge(scope, current)}
-            recents={pinned}
-            scopeKey={scope.key}
-            {...list}
-            header={null}
-            pinnedTarget={pinSlots[scope.key] ?? null}
-            anyPinned={anyPinned}
-          />
-        )}
-        <ScopeBody open={open}>
-          {groups.map((group) => {
-            // The main checkout's Chats sit right under the Sub-project, and so does a Worktree's only Chat (each new
-            // Chat makes its own Worktree). A Worktree shared by several Chats names them with a heading.
-            if (group.primary || group.rows.length < 2)
-              return group.rows.length ? (
-                <ChatList key={group.path} {...scopeBadge(scope, current)} recents={group.rows} scopeKey={scope.key} {...list} header={null} />
-              ) : null;
-            return (
-              <div key={group.path} data-sidebar-worktree={group.path}>
-                <WorktreeHeading name={group.name} running={group.rows.some((row) => row.mark === "running" || row.mark === "background")} />
-                <div className="ml-3">
-                  <ChatList {...scopeBadge(scope, current)} recents={group.rows} scopeKey={scope.key} {...list} header={null} />
-                </div>
-              </div>
-            );
-          })}
-          {!state && !current && failedScopes.has(scope.key) ? (
-            <p className="mx-2 flex h-8 items-center gap-1 pl-9 text-[length:calc(13px+var(--sidebar-delta))] text-ink-3">
-              Couldn't load Chats.
-              <button type="button" onClick={() => retryScope(scope.key)} className={RETRY}>
-                Retry
-              </button>
-            </p>
-          ) : (
-            !state && !current && <p className="mx-2 h-8 pl-9 text-[length:calc(13px+var(--sidebar-delta))] leading-8 text-ink-3">Loading Chats…</p>
-          )}
-        </ScopeBody>
+        {/* A member without Chats says nothing: its heading is enough under the Link. */}
+        <ScopeBody open={open}>{scopeChatsBody(section, true)}</ScopeBody>
       </section>
     );
   };
@@ -1822,9 +1746,9 @@ export default memo(function SidebarNav({
                   {!oneList && chatsGroup}
                   {oneList
                     ? flatBody
-                    : sectionTree.map(({ item: section, children: subprojects }, index) => {
+                    : sectionTree.map(({ item: section, children: members }, index) => {
                         if (section.copies.length > 1) return mergedSection(section);
-                        const { scope, current, state, rest, pinned, list, dimmed } = section;
+                        const { scope, current, list, dimmed } = section;
                         const open = !closedScopes.includes(scope.key);
                         return (
                           <section
@@ -1859,12 +1783,8 @@ export default memo(function SidebarNav({
                               }
                               open={open}
                               current={current}
-                              attention={
-                                (!current && attentionPaths.includes(scope.key)) ||
-                                (!open && subprojects.some((child) => !child.current && attentionPaths.includes(child.scope.key)))
-                              }
+                              attention={!current && attentionPaths.includes(scope.key)}
                               computer={list.show.computer ? list.computer : undefined}
-                              subprojects={subprojects.length || undefined}
                               onToggle={() => toggleScope(scope.key)}
                               onDragStart={canDragScope(scope.key) ? (event) => startScopeDrag(event, scope.key) : undefined}
                               dragging={draggingScope === scope.key}
@@ -1879,39 +1799,8 @@ export default memo(function SidebarNav({
                               menu={scopeMenu(scope)}
                             />
                             <ScopeBody open={open}>
-                              {subprojects.length > 0 && (
-                                <WorktreeHeading name={`${scope.name} workspace`} current={current} onNewChat={newChatFor(scope.key, current)} />
-                              )}
-                              {rest.length > 0 || pinned.length > 0 ? (
-                                <ChatList
-                                  {...scopeBadge(scope, current)}
-                                  recents={pinned.length ? [...pinned, ...rest] : rest}
-                                  scopeKey={scope.key}
-                                  {...list}
-                                  header={null}
-                                  pinnedTarget={pinSlots[scope.key] ?? null}
-                                  anyPinned={anyPinned}
-                                />
-                              ) : !state && !current && failedScopes.has(scope.key) ? (
-                                <p className="mx-2 flex h-8 items-center gap-1 pl-9 text-[length:calc(13px+var(--sidebar-delta))] text-ink-3">
-                                  Couldn't load Chats.
-                                  <button type="button" onClick={() => retryScope(scope.key)} className={RETRY}>
-                                    Retry
-                                  </button>
-                                </p>
-                              ) : (
-                                !subprojects.length && (
-                                  <p className="mx-2 h-8 pl-9 text-[length:calc(13px+var(--sidebar-delta))] leading-8 text-ink-3">
-                                    {state || current ? "No Chats yet" : "Loading Chats…"}
-                                  </p>
-                                )
-                              )}
-                              {subprojects.map((child) =>
-                                subprojectSection(
-                                  child,
-                                  subprojects.map((item) => item.scope.key),
-                                ),
-                              )}
+                              {scopeChatsBody(section, members.length > 0)}
+                              {members.map(linkMember)}
                             </ScopeBody>
                           </section>
                         );
@@ -2010,22 +1899,6 @@ export default memo(function SidebarNav({
         </div>
       </aside>
       {removingProject && <RemoveProjectDialog project={removingProject} onClose={() => setRemovingProject(null)} />}
-      {editingSubprojects && (
-        <SubprojectsDialog
-          scan={editingSubprojects}
-          adding={false}
-          onClose={() => setEditingSubprojects(null)}
-          onSave={async (paths) => {
-            const list = await bridgeForKey(editingSubprojects.folder).setSubprojects(editingSubprojects.folder, paths);
-            if (Array.isArray(list)) setRecentProjects(list);
-            // A Project that becomes a Parent Project shows as one: the Sub-projects layout comes on.
-            const layout = subprojectsLayout(chatList);
-            if (layout && paths.length) updateSettings({ chatList: layout });
-            window.dispatchEvent(new Event(RECENT_PROJECTS_CHANGED));
-            setEditingSubprojects(null);
-          }}
-        />
-      )}
       {!collapsed && (
         <ResizeHandle
           label="Resize sidebar"

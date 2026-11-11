@@ -7,7 +7,7 @@ import {
   parseChatList,
   parseCompactButtonDisplay,
   parseToolCallDisplay,
-  subprojectsLayout,
+  treeLayout,
 } from "./chat-display.ts";
 
 test("compact button preferences share the context warning threshold and respect provider support", () => {
@@ -32,21 +32,21 @@ test("Tool call display keeps a saved choice and reads Murilo mode as Full detai
   assert.equal(parseToolCallDisplay("loud"), "compact");
 });
 
-test("Chat list reads a saved choice and falls back to One list; a Parent Project switches it to Sub-projects", () => {
+test("Chat list reads a saved choice and falls back to One list; adding a folder of repositories switches it to Tree", () => {
   assert.equal(parseChatList("grouped"), "grouped");
   assert.equal(parseChatList("list"), "list");
   assert.equal(parseChatList("tree"), "tree");
   assert.equal(parseChatList(undefined), "list");
   assert.equal(parseChatList("tabs"), "list");
   assert.equal(parseChatList(null), "list");
-  assert.equal(subprojectsLayout("list"), "tree");
-  assert.equal(subprojectsLayout("grouped"), "tree");
-  assert.equal(subprojectsLayout("tree"), null);
+  assert.equal(treeLayout("list"), "tree");
+  assert.equal(treeLayout("grouped"), "tree");
+  assert.equal(treeLayout("tree"), null);
   assert.deepEqual(
     CHAT_LIST_MODES.map((mode) => mode.id),
     ["list", "grouped", "tree"],
   );
   assert.equal(chatListLabel("list"), "One list");
   assert.equal(chatListLabel("grouped"), "Grouped by Project");
-  assert.equal(chatListLabel("tree"), "Sub-projects");
+  assert.equal(chatListLabel("tree"), "Tree");
 });

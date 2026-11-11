@@ -181,8 +181,8 @@ function GroupedPreview() {
   );
 }
 
-/** Sub-projects: a Parent Project, its Sub-projects under it, each with a Worktree and its Chats. */
-function SubprojectsPreview() {
+/** Tree: a Link with its Projects under it, each with a Worktree and its Chats. */
+function TreePreview() {
   return (
     <span className="flex flex-col gap-[5px]">
       <GroupHeader color={AVATARS[0]!} width="36%" />
@@ -267,7 +267,7 @@ function FullToolsPreview() {
 const CHAT_LIST_CHOICES: Choice<ChatList>[] = [
   { id: "list", label: "One list", description: "Newest first, Project on each row.", preview: <OneListPreview /> },
   { id: "grouped", label: "By Project", description: "A group per Project that folds.", preview: <GroupedPreview /> },
-  { id: "tree", label: "Sub-projects", description: "Parent Projects with their Sub-projects and Worktrees.", preview: <SubprojectsPreview /> },
+  { id: "tree", label: "Tree", description: "Each Project with its Worktrees, each Link with its Projects.", preview: <TreePreview /> },
 ];
 
 const REASONING_CHOICES: Choice<"folded" | "expanded">[] = [

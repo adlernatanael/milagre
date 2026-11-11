@@ -1076,7 +1076,7 @@ function WorktreesSettings() {
         <MainSyncDefaultSetting />
       </Group>
       <Group title="Add Project">
-        <DetectSubprojectsSetting />
+        <DetectRepositoriesSetting />
       </Group>
       <Group title="Storage" footer="Each Project's page sets how its new Worktrees are named and set up.">
         <Row label={CLEANUP_TITLE} description={CLEANUP_INTRO}>
@@ -2549,17 +2549,18 @@ export function MainSyncDefaultSetting() {
   );
 }
 
-const DETECT_SUBPROJECTS_TITLE = "Detect Sub-projects";
+const DETECT_REPOSITORIES_TITLE = "Detect repositories in a folder";
+const DETECT_REPOSITORIES_HINT = "When a folder you add holds repositories, offer to add them as Projects with a Link that groups them.";
 // Add Project's folder check (project:scan-children): kept by the daemon, so the phone's Add Project follows it too.
-export function DetectSubprojectsSetting() {
+export function DetectRepositoriesSetting() {
   const [detect, setDetect] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     // An older host without the command reads as on, the default.
     Promise.resolve()
-      .then(() => bridgeFor(null).readDetectSubprojects())
+      .then(() => bridgeFor(null).readDetectRepositories())
       .then(
-        (value) => setDetect(value?.detectSubprojects !== false),
+        (value) => setDetect(value?.detectRepositories !== false),
         () => setDetect(true),
       );
   }, []);
@@ -2567,16 +2568,16 @@ export function DetectSubprojectsSetting() {
     setError(null);
     setDetect(next);
     try {
-      setDetect((await bridgeFor(null).saveDetectSubprojects(next)).detectSubprojects);
+      setDetect((await bridgeFor(null).saveDetectRepositories(next)).detectRepositories);
     } catch (failure) {
       setDetect(!next);
       setError(ipcErrorMessage(failure));
     }
   }
   return (
-    <div data-detect-subprojects>
-      <Row label={DETECT_SUBPROJECTS_TITLE} description="When a folder you add holds repositories, offer it as a Parent Project with them as Sub-projects.">
-        <SettingCheckbox label={DETECT_SUBPROJECTS_TITLE} checked={detect !== false} onChange={(next) => void change(next)} />
+    <div data-detect-repositories>
+      <Row label={DETECT_REPOSITORIES_TITLE} description={DETECT_REPOSITORIES_HINT}>
+        <SettingCheckbox label={DETECT_REPOSITORIES_TITLE} checked={detect !== false} onChange={(next) => void change(next)} />
       </Row>
       {error && <p className="px-4 pb-3 break-words text-12 text-red-ink">{error}</p>}
     </div>

@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { FolderOpenIcon, GitBranchIcon } from "@hugeicons/core-free-icons";
 import { ipcErrorMessage } from "@milagre/shared/result";
+import { treeLayout } from "@milagre/shared/chat-display";
+import type { FolderScan } from "@milagre/shared/project-list";
 import type { OpenProject } from "../model";
 import { bridgeFor } from "../lib/computer-bridge";
-import { RECENT_PROJECTS_CHANGED, type SubprojectScan } from "../lib/project-list";
+import { RECENT_PROJECTS_CHANGED } from "../lib/project-list";
 import { updateSettings, useSettings } from "../lib/settings";
-import { subprojectsLayout } from "@milagre/shared/chat-display";
 import { Button } from "./primitives/Button";
 import { Checkbox } from "./primitives/Checkbox";
 import { Dialog } from "./primitives/Dialog";
@@ -14,30 +15,29 @@ import { Icon } from "./primitives/Icon";
 import { InlineError } from "./primitives/InlineError";
 import { ScrollArea } from "./primitives/ScrollArea";
 
+const folderName = (folder: string) => folder.split("/").findLast(Boolean) ?? folder;
+
 /**
- * Choose a Parent Project's Sub-projects: the repositories and folders inside it, as a checklist. Adding a folder offers
- * it with every repository checked, and "Open as one Project" skips the grouping; editing a Parent Project starts from
- * the ones it has. Mounted only while open.
+ * Adding a folder that holds repositories: a checklist of them (repositories checked, other folders not). The checked
+ * ones open as Projects and, two or more, get a Named Link named after the folder, which the Tree layout draws with them
+ * under it. "Open as one Project" opens the folder itself instead. Mounted only while open.
  */
-export function SubprojectsDialog({
+export function ImportFolderDialog({
   scan,
-  adding,
   onClose,
   onOpenSingle,
-  onSave,
+  onAdd,
 }: {
-  scan: SubprojectScan;
-  /** Add Project's step: the folder isn't a Project yet. */
-  adding: boolean;
+  scan: FolderScan;
   onClose: () => void;
-  onOpenSingle?: () => Promise<void>;
-  onSave: (paths: string[]) => Promise<void>;
+  onOpenSingle: () => Promise<void>;
+  onAdd: (paths: string[]) => Promise<void>;
 }) {
   const choices = scan.children;
   const [selected, setSelected] = useState<string[]>(() => choices.filter((child) => child.chosen).map((child) => child.path));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const name = scan.folder.split("/").findLast(Boolean) ?? scan.folder;
+  const name = folderName(scan.folder);
   // In the scan's order, whatever order they were checked in.
   const chosen = choices.map((child) => child.path).filter((path) => selected.includes(path));
   async function run(action: () => Promise<void>) {
@@ -53,30 +53,24 @@ export function SubprojectsDialog({
   const allChecked = choices.length > 0 && chosen.length === choices.length;
   return (
     <Dialog
-      data-subprojects-dialog
-      title={adding ? `Add ${name}` : `Sub-projects of ${name}`}
-      description={
-        adding
-          ? `${name} holds ${choices.filter((child) => child.git).length} repositories. Add it as a Parent Project with the ones you check as its Sub-projects, each with its own Worktrees and Chats.`
-          : "Each checked folder is listed under this Project in the sidebar, with its own Worktrees and Chats."
-      }
+      data-import-folder-dialog
+      title={`Add ${name}`}
+      description={`${name} holds ${choices.filter((child) => child.git).length} repositories. Add the ones you check as Projects, grouped by a Link named ${name}.`}
       onClose={onClose}
       width={520}
       footer="bar"
       footerStart={
-        adding && onOpenSingle ? (
-          <Button variant="ghost" disabled={busy} onClick={() => void run(onOpenSingle)}>
-            Open as one Project
-          </Button>
-        ) : undefined
+        <Button variant="ghost" disabled={busy} onClick={() => void run(onOpenSingle)}>
+          Open as one Project
+        </Button>
       }
       actions={
         <>
           <Button variant="ghost" disabled={busy} onClick={onClose}>
             Cancel
           </Button>
-          <Button data-subprojects-save disabled={busy || (adding && !chosen.length)} onClick={() => void run(() => onSave(chosen))}>
-            {adding ? `Add with ${chosen.length} Sub-project${chosen.length === 1 ? "" : "s"}` : "Save"}
+          <Button data-import-folder-add disabled={busy || !chosen.length} onClick={() => void run(() => onAdd(chosen))}>
+            {`Add ${chosen.length} Project${chosen.length === 1 ? "" : "s"}`}
           </Button>
         </>
       }
@@ -95,7 +89,7 @@ export function SubprojectsDialog({
         {choices.map((child) => (
           <label
             key={child.path}
-            data-subproject={child.relative}
+            data-import-folder-item={child.relative}
             className="flex h-11 items-center gap-2 rounded-control px-2 transition-colors hover:bg-hover"
           >
             <Checkbox
@@ -123,38 +117,42 @@ export function SubprojectsDialog({
 }
 
 /**
- * Opening a folder on this Mac, as Add Project and onboarding do: one with repositories inside first asks which become
- * its Sub-projects (Settings › Worktrees › Detect Sub-projects can turn that off); any other opens at once. `dialog` is
- * that question while it is asked.
+ * Opening a folder on this Mac, as Add Project and onboarding do. A folder that holds repositories (and isn't one)
+ * first asks which to add (Settings › Worktrees › Detect repositories in a folder can turn that off); they open as
+ * Projects with a Named Link that groups them, and the Tree layout comes on to draw it. Any other folder opens at once.
+ * `dialog` is that question while it is asked.
  */
 export function useOpenFolder(onOpened: (project: OpenProject) => void, onCancel?: () => void) {
-  const [scan, setScan] = useState<SubprojectScan | null>(null);
+  const [scan, setScan] = useState<FolderScan | null>(null);
   const { chatList } = useSettings();
   const bridge = bridgeFor(null);
   async function open(folder: string) {
-    const found = await bridge.scanSubprojects(folder).catch(() => null);
-    // A repository with repositories inside (submodules, a monorepo) opens as one Project; Sub-projects… can still group it.
+    const found = await bridge.scanFolder(folder).catch(() => null);
     if (found?.detect && !found.git && found.children.some((child) => child.git)) setScan(found);
     else onOpened(await bridge.openProjectAt(folder));
   }
+  async function add(folder: string, paths: string[]) {
+    const opened: OpenProject[] = [];
+    for (const path of paths) opened.push(await bridge.openProjectAt(path));
+    if (opened.length > 1) {
+      const registered = await bridge.listProjects();
+      const projectIds = opened.map((project) => registered.find((entry) => entry.path === project.path)?.id).filter((id): id is string => !!id);
+      if (projectIds.length > 1) await bridge.createNamedLink({ name: folderName(folder), projectIds });
+      const layout = treeLayout(chatList);
+      if (layout) updateSettings({ chatList: layout });
+    }
+    window.dispatchEvent(new Event(RECENT_PROJECTS_CHANGED));
+    onOpened(opened[0]!);
+  }
   const dialog = scan && (
-    <SubprojectsDialog
+    <ImportFolderDialog
       scan={scan}
-      adding
       onClose={() => {
         setScan(null);
         onCancel?.();
       }}
       onOpenSingle={async () => onOpened(await bridge.openProjectAt(scan.folder))}
-      onSave={async (paths) => {
-        const opened = await bridge.openProjectAt(scan.folder);
-        await bridge.setSubprojects(opened.path, paths);
-        // The Sub-projects layout is what draws a Parent Project: it comes on with the first one.
-        const layout = subprojectsLayout(chatList);
-        if (layout && paths.length) updateSettings({ chatList: layout });
-        window.dispatchEvent(new Event(RECENT_PROJECTS_CHANGED));
-        onOpened(opened);
-      }}
+      onAdd={(paths) => add(scan.folder, paths)}
     />
   );
   return { open, dialog };

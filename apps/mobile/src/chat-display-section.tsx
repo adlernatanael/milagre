@@ -15,7 +15,7 @@ import {
   FullToolsPreview,
   OneListPreview,
   SampleChatRow,
-  SubprojectsPreview,
+  TreePreview,
 } from "./chat-display-choices";
 import { ListRow, Toggle, showActions, useStyles } from "./ui";
 import { radius } from "./design-tokens";
@@ -43,9 +43,9 @@ export function ChatDisplaySection() {
           { value: "grouped", title: "By Project", description: "A group per Project that folds.", preview: <ByProjectPreview /> },
           {
             value: "tree",
-            title: "Sub-projects",
-            description: "Parent Projects with their Sub-projects and Worktrees.",
-            preview: <SubprojectsPreview />,
+            title: "Tree",
+            description: "Each Project with its Worktrees, each Link with its Projects.",
+            preview: <TreePreview />,
           },
         ]}
       />
